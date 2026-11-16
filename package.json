@@ -83,7 +83,7 @@
     "magic-string": "^1.4.5",
     "markdown-it": "^15.0.3",
     "markdown-it-anchor": "^10.1.0",
-    "stylelint": "^17.16.0",
+    "stylelint": "^18.0.0",
     "typescript": "~6.0.3",
     "vite": "^7.3.8",
     "vitest": "^5.1.0",
