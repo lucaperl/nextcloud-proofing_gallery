@@ -4,6 +4,7 @@ import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
 
 import { usePublicGridGeometry } from './composables/usePublicGridGeometry.ts'
 import { publicGalleryThemeStyle } from './domain/publicGalleryThemeStyle.ts'
@@ -283,6 +284,8 @@ function itemRatio(item: MediaItem): number {
 function rememberDimensions(item: MediaItem, event: Event) {
 	const image = event.currentTarget as HTMLImageElement
 	if (!image.naturalWidth || !image.naturalHeight) return
+	const previous = mediaDimensions.value[item.id]
+	if (previous?.width === image.naturalWidth && previous.height === image.naturalHeight) return
 	mediaDimensions.value = {
 		...mediaDimensions.value,
 		[item.id]: { width: image.naturalWidth, height: image.naturalHeight },
@@ -612,7 +615,7 @@ function groupLabel(group: string | undefined): string {
 											role="checkbox"
 											:aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })"
 											@click="toggleSelection(item)">
-											{{ selectedIds.includes(item.id) ? '✓' : '' }}
+											<CheckIcon v-if="selectedIds.includes(item.id)" :size="18" aria-hidden="true" />
 										</button>
 									</article>
 								</template>

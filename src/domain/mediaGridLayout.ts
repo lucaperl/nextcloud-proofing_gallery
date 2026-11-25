@@ -98,8 +98,10 @@ export function calculateMediaLayout(input: MediaLayoutInput): { positions: Medi
 
 	const positions: MediaLayoutPosition[] = []
 	let rowStart = 0
+	let previousRowStart = 0
 	let rowRatio = 0
 	let y = 0
+	let previousRowHeight = input.targetRowHeight
 	for (let index = 0; index < ratios.length; index++) {
 		rowRatio += ratios[index]
 		const count = index - rowStart + 1
@@ -107,7 +109,11 @@ export function calculateMediaLayout(input: MediaLayoutInput): { positions: Medi
 		const finalRow = index === ratios.length - 1
 		if (fillHeight > input.targetRowHeight && !finalRow) continue
 
-		const height = finalRow ? Math.min(input.targetRowHeight, fillHeight) : fillHeight
+		let height = fillHeight
+		if (finalRow && fillHeight > input.targetRowHeight) {
+			const sameFormat = ratios.slice(previousRowStart).every(ratio => ratio === ratios[rowStart])
+			height = sameFormat ? previousRowHeight : input.targetRowHeight
+		}
 		let x = 0
 		for (let itemIndex = rowStart; itemIndex <= index; itemIndex++) {
 			const isFilledRowEnd = !finalRow && itemIndex === index
@@ -118,8 +124,10 @@ export function calculateMediaLayout(input: MediaLayoutInput): { positions: Medi
 			x += width + input.gap
 		}
 		y += height + input.gap
+		previousRowStart = rowStart
 		rowStart = index + 1
 		rowRatio = 0
+		previousRowHeight = height
 	}
 
 	return { positions, totalHeight: Math.max(0, y - input.gap) }
