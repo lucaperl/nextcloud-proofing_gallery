@@ -13,7 +13,9 @@ export function usePublicGalleryHistory(options: {
 }) {
 	const applyingHistory = ref(false)
 	let generation = 0
+	let closingPhotoEntry = false
 	async function historyChanged() {
+		closingPhotoEntry = false
 		const request = ++generation
 		applyingHistory.value = true
 		try {
@@ -23,12 +25,33 @@ export function usePublicGalleryHistory(options: {
 			await options.apply(location)
 		} finally { if (request === generation) applyingHistory.value = false }
 	}
-	function updateLocation(mode: 'push' | 'replace', photoId: number | null = null, state: Record<string, unknown> = {}) {
+	function updateLocation(mode: 'push' | 'replace', photoId: number | null = null) {
 		if (!options.enabled) return
-		const url = writePublicGalleryLocation(new URL(window.location.href), options.state(photoId), options.override.value)
-		window.history[mode === 'push' ? 'pushState' : 'replaceState'](state, '', url)
+		const currentUrl = new URL(window.location.href)
+		const fromGallery = photoId !== null && (mode === 'push'
+			? !currentUrl.searchParams.has('photo')
+			: window.history.state?.proofingGalleryPhotoFromGrid === true)
+		if (fromGallery && mode === 'push') {
+			// Preserve the grid's effective sort and layout when they came from browser preferences.
+			const gridUrl = writePublicGalleryLocation(currentUrl, options.state(), options.override.value)
+			if (gridUrl.href !== currentUrl.href) window.history.replaceState(window.history.state, '', gridUrl)
+		}
+		const url = writePublicGalleryLocation(currentUrl, options.state(photoId), options.override.value)
+		window.history[mode === 'push' ? 'pushState' : 'replaceState'](fromGallery ? { proofingGalleryPhotoFromGrid: true } : {}, '', url)
+	}
+
+	function closePhotoEntry() {
+		if (!options.enabled || applyingHistory.value || !new URL(window.location.href).searchParams.has('photo')) return
+		if (window.history.state?.proofingGalleryPhotoFromGrid !== true) {
+			updateLocation('replace')
+			return
+		}
+		if (!closingPhotoEntry) {
+			closingPhotoEntry = true
+			window.history.back()
+		}
 	}
 	onMounted(() => { if (options.enabled) window.addEventListener('popstate', historyChanged) })
 	onBeforeUnmount(() => { generation++; window.removeEventListener('popstate', historyChanged) })
-	return { applyingHistory, updateLocation }
+	return { applyingHistory, updateLocation, closePhotoEntry }
 }
