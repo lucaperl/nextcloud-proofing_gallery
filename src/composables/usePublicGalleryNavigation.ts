@@ -85,11 +85,13 @@ export function usePublicGalleryNavigation(options: {
 		options.scrollToGrid()
 	}
 
-	function upOneLevel() {
+	async function upOneLevel() {
 		currentPath.value = currentPath.value.split('/').slice(0, -1).join('/')
 		currentPage.value = 1
 		updateLocation('push')
-		loadPage(1)
+		await loadPage(1)
+		await nextTick()
+		options.scrollToGrid()
 	}
 
 	watch([layout, sortBy, sortDirection, sortOverride, groupBy, search], () => {

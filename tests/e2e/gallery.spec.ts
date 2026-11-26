@@ -1116,6 +1116,60 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await context.close()
 })
 
+test('continuous scrolling keeps the public link and lightbox across gallery pages', async ({ page, request, baseURL }) => {
+	test.setTimeout(90_000)
+	const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const dav = `${baseURL}/remote.php/dav/files/admin/ContinuousGallery-${Date.now()}`
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	let galleryId: number | undefined
+	try {
+		expect((await request.fetch(dav, { method: 'MKCOL', headers })).status()).toBe(201)
+		for (let index = 1; index <= 50; index++) {
+			const name = `photo-${String(index).padStart(2, '0')}.png`
+			const upload = await request.put(`${dav}/${name}`, { headers: { ...headers, 'Content-Type': 'image/png' }, data: png })
+			expect(upload.status(), `Upload ${name}`).toBe(201)
+		}
+		const properties = await request.fetch(dav, {
+			method: 'PROPFIND',
+			headers: { ...headers, Depth: '0' },
+			data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>',
+		})
+		const folderId = Number((await properties.text()).match(/<(?:oc:)?fileid>(\d+)<\/(?:oc:)?fileid>/)?.[1])
+		expect(folderId).toBeGreaterThan(0)
+		const created = await request.post(`${galleries}?format=json`, {
+			headers, data: { folderId, title: 'Continuous gallery test', purpose: 'showcase', settings: { publicLocale: 'en' } },
+		})
+		expect(created.ok()).toBe(true)
+		galleryId = (await created.json() as { id: number }).id
+		const published = await request.post(`${galleries}/${galleryId}/publish?format=json`, { headers, data: {} })
+		expect(published.ok()).toBe(true)
+		const { gallery } = await published.json() as { gallery: { revision: number; shareToken: string } }
+		const share = `${baseURL}/s/${gallery.shareToken}`
+		await page.goto(share)
+		await expect(page.locator('.gallery-app-header__pager')).toBeVisible()
+
+		const updated = await request.put(`${galleries}/${galleryId}?format=json`, {
+			headers, data: { expectedRevision: gallery.revision, settings: { navigation: { browsingMode: 'scroll' } } },
+		})
+		expect(updated.ok()).toBe(true)
+		const firstPage = await request.get(`${baseURL}/apps/proofing_gallery/public/${gallery.shareToken}/gallery?limit=48`)
+		expect(firstPage.ok()).toBe(true)
+		const { mediaTotal, items } = await firstPage.json() as { mediaTotal: number; items: Array<{ id: number }> }
+		expect(mediaTotal).toBe(50)
+		await page.goto(`${share}?photo=${items.at(-1)!.id}`)
+		await expect(page.locator('.lightbox-bar small')).toHaveText('48 / 50')
+		await expect(page.locator('.gallery-app-header__pager')).toHaveCount(0)
+		await expect(page.locator('.pswp--open')).toBeVisible()
+		await page.keyboard.press('ArrowRight')
+		await expect(page.getByRole('dialog', { name: 'photo-49.png' })).toBeVisible()
+		await expect(page.locator('.lightbox-bar small')).toHaveText('49 / 50')
+	} finally {
+		if (galleryId) await request.delete(`${galleries}/${galleryId}?format=json`, { headers })
+		await request.delete(dav, { headers })
+	}
+})
+
 test('native upload picker applies rename, replacement and skip decisions', async ({ page, request, baseURL }) => {
 	const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
 	const dav = `${baseURL}/remote.php/dav/files/admin/Dialogs8-${Date.now()}`

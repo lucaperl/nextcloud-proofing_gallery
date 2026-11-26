@@ -17,7 +17,7 @@ import {
 defineProps<{
 	name: string
 	position: number
-	count: number
+	count: number | null
 	isImage: boolean
 	liked: boolean
 	commentCount: number
@@ -48,7 +48,7 @@ const emit = defineEmits<{
 			</IonButtons>
 			<IonTitle>
 				<span v-if="name" class="lightbox-bar__title">{{ name }}</span>
-				<small>{{ position }} / {{ count }}</small>
+				<small>{{ position }} / {{ count ?? '…' }}</small>
 			</IonTitle>
 			<IonButtons slot="end">
 				<IonButton v-if="isImage"

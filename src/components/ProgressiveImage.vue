@@ -6,11 +6,15 @@ const props = withDefaults(defineProps<{
 	src: string
 	alt?: string
 	priority?: boolean
+	fetchPriority?: 'auto' | 'low'
 	direct?: boolean
+	instant?: boolean
 }>(), {
 	alt: '',
 	priority: false,
+	fetchPriority: undefined,
 	direct: false,
+	instant: false,
 })
 const emit = defineEmits<{ load: [event: Event]; error: [] }>()
 const loadedSource = ref('')
@@ -45,12 +49,12 @@ onBeforeUnmount(release)
 </script>
 
 <template>
-	<span class="progressive-image" :class="{ 'progressive-image--ready': ready }">
+	<span class="progressive-image" :class="{ 'progressive-image--ready': ready, 'progressive-image--instant': instant }">
 		<img
 			v-if="loadedSource"
 			:src="loadedSource"
 			:alt="alt"
-			:fetchpriority="priority ? 'high' : undefined"
+			:fetchpriority="priority ? 'high' : fetchPriority"
 			:loading="priority ? 'eager' : 'lazy'"
 			decoding="async"
 			@load="ready = true; emit('load', $event)"
@@ -76,6 +80,8 @@ onBeforeUnmount(release)
 }
 
 .progressive-image--ready img { opacity: 1; }
+
+.progressive-image--instant img { opacity: 1; transition: none; }
 
 @media (prefers-reduced-motion: reduce) {
 	.progressive-image img { transition: none; }

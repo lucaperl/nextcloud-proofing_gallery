@@ -85,6 +85,7 @@ export interface GallerySettings {
 		sortBy: 'name' | 'modified' | 'size' | 'capturedAt' | 'collection'
 		sortDirection: 'asc' | 'desc'
 		groupBy: 'none' | 'type' | 'folder'
+		browsingMode: 'pages' | 'scroll'
 	}
 	security: {
 		allowModeSwitch: boolean
@@ -192,7 +193,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 			selectionDueDate: null,
 		},
 		delivery: { downloadScope: 'none', contactSheet: true, guestUploads: false },
-		navigation: { folders: true, recursive: false, groupDepth: 1, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },
+		navigation: { folders: true, recursive: false, groupDepth: 1, sortBy: 'name', sortDirection: 'asc', groupBy: 'none', browsingMode: 'pages' },
 		security: { allowModeSwitch: false, hideRejectedInPresentation: false },
 		metadata: { publicFields: [] },
 		lifecycle: { enabled: false, trigger: 'after_completion', revokeAt: '', revokeAfterDays: 30, archiveAfterDays: 30, reminderDays: [7, 1], retentionHandoff: false },

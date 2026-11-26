@@ -28,9 +28,12 @@ import PublicLightboxFeedbackTabs from './PublicLightboxFeedbackTabs.vue'
 import PublicLightboxGeneralFeedback from './PublicLightboxGeneralFeedback.vue'
 import PublicLightboxHeader from './PublicLightboxHeader.vue'
 import PublicLightboxMetadata from './PublicLightboxMetadata.vue'
+import { usePublicLightboxNavigation } from '../composables/usePublicLightboxNavigation.ts'
+import type { PublicLightboxPaging } from '../composables/usePublicLightboxNavigation.ts'
 
 const props = defineProps<{
 	mediaItems: MediaItem[]
+	paging?: PublicLightboxPaging
 	initialIndex: number
 	initialElement?: HTMLElement | null
 	settings: GallerySettings
@@ -77,7 +80,6 @@ const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
 ))
 const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
 const { chromeVisible, wakeChrome, toggleChrome } = usePublicLightboxChrome({ autoHide: autoHideChrome, delay: chromeAutoHideDelay, blocked: () => feedbackOpen.value || metadataOpen.value || shortcutsOpen.value })
-const loop = computed(() => props.mediaItems.length > 2), canStepPrevious = computed(() => loop.value || activeIndex.value > 0), canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
 const actionSheetClass = computed(() => ['proofing-public-overlay', 'lightbox-action-sheet'])
 const hasPublicMetadata = computed(() => hasReadyPublicMetadata(activeItem.value?.metadata))
 const actionSheetButtons = computed(() => [
@@ -117,14 +119,19 @@ const actionSheetButtons = computed(() => [
 ])
 
 let pswp: PhotoSwipe | null = null
+const { loop, canStepPrevious, canStepNext, step, startTouch, endTouch, waitingForPhoto, retryDirection } = usePublicLightboxNavigation({
+	items: () => props.mediaItems, paging: () => props.paging, activeIndex, viewer: () => pswp,
+})
+const displayPosition = computed(() => activeIndex.value + (props.paging?.offset ?? 0) + 1)
+const displayCount = computed(() => props.paging && (props.paging.before || props.paging.after) ? props.paging.total : props.mediaItems.length)
 const { slideshow, slideshowSuspended, slideshowCycle, slideshowDuration, fullscreen, scheduleSlideshow, setSlideshow, toggleFullscreen } = usePublicLightboxPlayback({
 	shell, preview: () => !!props.previewScene, initialSlideshow: props.previewScene === 'slideshow',
 	interval: () => props.settings.presentation.slideshowInterval,
 	busy: () => actionMenuOpen.value || feedbackOpen.value || metadataOpen.value || shortcutsOpen.value,
-	canNext: () => canStepNext.value, next: () => pswp?.next(),
+	canNext: () => canStepNext.value, next: async () => { await step(1); scheduleSlideshow() },
 })
 const mediaUpdates = usePublicLightboxLiveMedia({
-	items: () => props.mediaItems, activeIndex, viewer: () => pswp, toSlide: toSlideData,
+	items: () => props.mediaItems, activeIndex, viewer: () => pswp, toSlide: toSlideData, loop: () => loop.value,
 	changed: item => emit('active-change', item), close: () => emit('close'),
 })
 let unbindZoomSurface: (() => void) | null = null
@@ -212,7 +219,9 @@ function bindPhotoSwipeEvents() {
 	pswp.on('pointerMove', ({ originalEvent }) => {
 		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
 	})
+	pswp.on('pointerDown', ({ originalEvent }) => startTouch(originalEvent))
 	pswp.on('pointerUp', ({ originalEvent }) => {
+		endTouch(originalEvent)
 		if (originalEvent.pointerType === 'touch') lastTouchPointerUpAt = Date.now()
 	})
 	pswp.on('tapAction', event => {
@@ -272,7 +281,7 @@ onMounted(async () => {
 	if (unmounting || !shell.value) return
 	pswp = new PhotoSwipeConstructor({
 		dataSource: props.mediaItems.map(toSlideData),
-		index: props.initialIndex,
+		index: activeIndex.value,
 		appendToEl: shell.value,
 		bgOpacity: 1,
 		loop: loop.value,
@@ -358,11 +367,6 @@ function toggleFilmstrip() {
 	if (!props.previewScene) safelyStore(() => sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible'))
 	wakeChrome()
 	nextTick(() => pswp?.updateSize(true))
-}
-
-function step(direction: number) {
-	if (direction < 0 && canStepPrevious.value) pswp?.prev()
-	else if (direction > 0 && canStepNext.value) pswp?.next()
 }
 
 function goTo(index: number) {
@@ -451,8 +455,8 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 		@focusin="wakeChrome">
 		<PublicLightboxHeader
 			:name="settings.presentation.showFilenames ? activeItem.name : ''"
-			:position="activeIndex + 1"
-			:count="mediaItems.length"
+			:position="displayPosition"
+			:count="displayCount"
 			:is-image="activeItem.mimeType.startsWith('image/')"
 			:liked="Boolean(collaboration?.likes[activeItem.id]?.mine)"
 			:comment-count="activeComments.length"
@@ -478,7 +482,7 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			:is-open="actionMenuOpen"
 			:css-class="actionSheetClass"
 			:header="activeItem.name"
-			:sub-header="`${activeIndex + 1} / ${mediaItems.length}`"
+			:sub-header="`${displayPosition} / ${displayCount ?? '…'}`"
 			:buttons="actionSheetButtons"
 			@did-dismiss="actionMenuOpen = false" />
 		<IonButton v-if="autoHideChrome && !chromeVisible"
@@ -489,7 +493,7 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			<IonIcon slot="icon-only" :icon="chevronBackOutline" aria-hidden="true" />
 		</IonButton>
 
-		<IonButton v-if="mediaItems.length > 1"
+		<IonButton v-if="mediaItems.length > 1 || paging?.before"
 			class="lightbox-nav lightbox-nav--previous"
 			fill="solid"
 			:disabled="!canStepPrevious"
@@ -497,7 +501,7 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			@click="step(-1)">
 			<IonIcon slot="icon-only" :icon="chevronBackOutline" aria-hidden="true" />
 		</IonButton>
-		<IonButton v-if="mediaItems.length > 1"
+		<IonButton v-if="mediaItems.length > 1 || paging?.after"
 			class="lightbox-nav lightbox-nav--next"
 			fill="solid"
 			:disabled="!canStepNext"
@@ -506,7 +510,16 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			<IonIcon slot="icon-only" :icon="chevronForwardOutline" aria-hidden="true" />
 		</IonButton>
 
-		<Transition name="touch-hint">
+		<p v-if="waitingForPhoto" class="lightbox-touch-hint" role="status">
+			{{ t('proofing_gallery', 'Loading…') }}
+		</p>
+		<button v-else-if="retryDirection !== null"
+			type="button"
+			class="lightbox-touch-hint lightbox-load-retry"
+			@click="step(retryDirection)">
+			{{ t('proofing_gallery', 'Try again') }}
+		</button>
+		<Transition v-else name="touch-hint">
 			<p v-if="touchHint" class="lightbox-touch-hint" role="status">
 				{{ t('proofing_gallery', 'Swipe to browse · pinch to zoom · pull down to close') }}
 			</p>

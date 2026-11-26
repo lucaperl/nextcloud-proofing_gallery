@@ -99,13 +99,18 @@ final class FolderPublicPageReader {
 		}, array_slice($nodes, $offset, $limit));
 
 		$groups = [];
-		foreach ($nodes as $node) {
+		$mediaTotal = $mediaOffset = 0;
+		foreach ($nodes as $index => $node) {
+			if (!($node instanceof Folder)) {
+				$mediaTotal++;
+				if ($index < $offset) $mediaOffset++;
+			}
 			$key = $groupBy === 'none' ? 'all' : self::group($node);
 			$groups[$key] = ($groups[$key] ?? 0) + 1;
 		}
 		return new PublicGalleryPage($items, count($nodes), $query, $offset,
 			nextCursor: null, previousCursor: null, groups: $groups,
-			indexState: ['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true], scope: ['startPath' => $startPath, 'allowedRoots' => $context->scope->roots, 'roots' => $rootDetails, 'viewMode' => 'folder', 'groupDepth' => $groupDepth], focusIndex: $focusIndex,
+			indexState: ['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true], scope: ['startPath' => $startPath, 'allowedRoots' => $context->scope->roots, 'roots' => $rootDetails, 'viewMode' => 'folder', 'groupDepth' => $groupDepth], focusIndex: $focusIndex, mediaTotal: $mediaTotal, mediaOffset: $mediaOffset,
 		);
 	}
 

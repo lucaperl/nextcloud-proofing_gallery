@@ -10,6 +10,8 @@ export interface PublicGalleryPage {
 	items: MediaItem[]
 	s: MediaItem[]
 	total: number
+	mediaTotal?: number
+	mediaOffset?: number
 	limit: number
 	offset: number
 	page: number

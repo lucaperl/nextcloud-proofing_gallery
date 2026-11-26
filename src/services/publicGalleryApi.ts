@@ -1,7 +1,7 @@
 import type { PublicGalleryPage } from '../publicTypes.ts'
 
 export async function fetchPublicGalleryPage(url: string, signal: AbortSignal): Promise<PublicGalleryPage> {
-	const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal })
+	const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, priority: 'high', signal })
 	if (!response.ok) throw new Error('Gallery request failed')
 	return await response.json() as PublicGalleryPage
 }

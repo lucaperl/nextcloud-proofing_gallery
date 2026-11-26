@@ -9,12 +9,14 @@ export function usePublicLightboxLiveMedia(options: {
 	activeIndex: Ref<number>
 	viewer: () => PhotoSwipe | null
 	toSlide: (item: MediaItem, index: number) => ReturnType<PhotoSwipe['getItemData']>
+	loop: () => boolean
 	changed: (item: MediaItem) => void
 	close: () => void
 }) {
 	let syncing = false
 	watch(options.items, (items, previous) => {
-		if (items.length === previous.length && items.every((item, index) => item.id === previous[index]?.id && item.etag === previous[index]?.etag)) return
+		const keepsPrefix = previous.every((item, index) => item.id === items[index]?.id && item.etag === items[index]?.etag)
+		if (items.length === previous.length && keepsPrefix) return
 		const fileId = previous[options.activeIndex.value]?.id
 		const index = items.findIndex(item => item.id === fileId)
 		if (index < 0) { options.close(); return }
@@ -23,13 +25,30 @@ export function usePublicLightboxLiveMedia(options: {
 		if (!viewer) return
 		syncing = true
 		try {
+			const source = viewer.options.dataSource
+			viewer.options.loop = options.loop()
+			if (keepsPrefix && Array.isArray(source)) {
+				const added = items.slice(previous.length).map((item, addedIndex) => options.toSlide(item, previous.length + addedIndex))
+				viewer.options.dataSource = source.concat(added)
+				if (index + 1 === previous.length) viewer.refreshSlideContent(index + 1)
+				if (index === 0 && options.loop()) viewer.refreshSlideContent(items.length - 1)
+				return
+			}
 			viewer.options.dataSource = items.map(options.toSlide)
-			viewer.options.loop = items.length > 2
 			for (let old = 0; old < previous.length; old++) viewer.contentLoader.removeByIndex(old)
 			viewer.goTo(index)
 			for (const nearby of [index - 1, index, index + 1]) if (nearby >= 0 && nearby < items.length) viewer.refreshSlideContent(nearby)
 		} finally { syncing = false }
 		options.changed(items[index]!)
+	})
+	watch(options.loop, loop => {
+		const viewer = options.viewer()
+		if (!viewer || viewer.options.loop === loop) return
+		viewer.options.loop = loop
+		if (!loop) return
+		const last = options.items().length - 1
+		if (options.activeIndex.value === 0) viewer.refreshSlideContent(last)
+		if (options.activeIndex.value === last) viewer.refreshSlideContent(0)
 	})
 	return { get syncing() { return syncing } }
 }

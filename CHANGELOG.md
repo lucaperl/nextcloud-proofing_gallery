@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- choose pages or continuous scrolling for each gallery's public links
+- request the next file block earlier and show decoded tiles immediately in
+  continuous galleries
+- browse across gallery batches in the guest lightbox while keeping the photo
+  counter tied to the current folder and filters
+
 ## 0.13.1 — 2026-11-25
 
 Upgrade note: installations on PHP 8.2.35 must upgrade to PHP 8.2.36 or newer
