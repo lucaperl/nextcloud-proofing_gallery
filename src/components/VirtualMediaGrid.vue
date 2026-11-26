@@ -26,6 +26,7 @@ const props = withDefaults(defineProps<{
 	scrollElement?: HTMLElement | null
 	hasMore?: boolean
 	loadingMore?: boolean
+	trackVisible?: boolean
 	ariaLabel?: string
 }>(), {
 	mode: 'grid',
@@ -48,7 +49,7 @@ const props = withDefaults(defineProps<{
 	ariaLabel: undefined,
 })
 
-const emit = defineEmits<{ 'load-more': [] }>()
+const emit = defineEmits<{ 'load-more': []; 'visible-items': [items: MediaItem[]] }>()
 
 const CONTAINED_MIN_HEIGHT = 360
 const CONTAINED_VIEWPORT_MARGIN = 8
@@ -194,7 +195,8 @@ function scrollToIndex(index: number, behavior: ScrollBehavior = 'auto') {
 
 defineExpose({ scrollToIndex, measure })
 
-watch(renderedPositions, visible => {
+watch([renderedPositions, () => props.trackVisible], ([visible, tracking]) => {
+	if (tracking) emit('visible-items', visible.map(({ index }) => props.items[index]))
 	const last = visible.at(-1)?.index ?? -1
 	if (props.hasMore && !props.loadingMore && last >= props.items.length - 4) emit('load-more')
 })

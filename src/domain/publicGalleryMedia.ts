@@ -1,4 +1,12 @@
+import { t } from '@nextcloud/l10n'
 import type { MediaItem } from '../types.ts'
+
+export function groupLabel(group: string | undefined): string {
+	if (group === 'image') return t('proofing_gallery', 'Images')
+	if (group === 'video') return t('proofing_gallery', 'Videos')
+	if (group === 'root') return t('proofing_gallery', 'Main folder')
+	return group || t('proofing_gallery', 'Other')
+}
 
 export function publicMediaListDetails(
 	item: MediaItem,

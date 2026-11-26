@@ -6,7 +6,7 @@ export interface PublicGallerySavedView {
 	groupBy: 'none' | 'type' | 'folder'
 	search: string
 }
-export interface PublicGalleryContinuation { scrollY: number; fileId: number | null; path: string; page: number }
+export interface PublicGalleryContinuation { scrollY: number; fileId: number | null; path: string; page: number; lastPage?: number }
 
 export function viewStorageKey(token: string): string { return `proofing-gallery-view:${token}` }
 export function layoutSessionStorageKey(token: string): string { return `proofing-gallery-layout:${token}` }
@@ -36,7 +36,14 @@ export function loadPublicGallerySessionLayout(token: string): PublicGalleryLayo
 export function loadPublicGalleryContinuation(token: string): PublicGalleryContinuation | null {
 	try {
 		const saved = JSON.parse(localStorage.getItem(continuationStorageKey(token)) ?? 'null') as Record<string, unknown> | null
-		return saved && Number.isFinite(saved.scrollY) ? { scrollY: Number(saved.scrollY), fileId: Number.isInteger(saved.fileId) ? Number(saved.fileId) : null, path: typeof saved.path === 'string' ? saved.path : '', page: Number.isInteger(saved.page) && Number(saved.page) > 0 ? Number(saved.page) : 1 } : null
+		if (!saved || !Number.isFinite(saved.scrollY)) return null
+		return {
+			scrollY: Number(saved.scrollY),
+			fileId: Number.isInteger(saved.fileId) ? Number(saved.fileId) : null,
+			path: typeof saved.path === 'string' ? saved.path : '',
+			page: Number.isSafeInteger(saved.page) && Number(saved.page) > 0 ? Number(saved.page) : 1,
+			lastPage: Number.isSafeInteger(saved.lastPage) && Number(saved.lastPage) > 0 ? Number(saved.lastPage) : undefined,
+		}
 	} catch { return null }
 }
 

@@ -1,18 +1,20 @@
 import { mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick, shallowRef } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePublicLiveUpdates } from './usePublicLiveUpdates.ts'
 import type { PublicGalleryPage } from '../publicTypes.ts'
 
-const page = { total: 1 } as PublicGalleryPage
-function harness() {
+const page = { total: 1, items: [] } as unknown as PublicGalleryPage
+function harness(preserveWindow = false) {
 	const state = { enabled: true, busy: false, url: '/public/token/gallery?page=1', photoId: 42 as number | null }
 	const apply = vi.fn()
+	const snapshot = shallowRef<PublicGalleryPage | undefined>(page)
+	let live!: ReturnType<typeof usePublicLiveUpdates>
 	const wrapper = mount(defineComponent({ setup() {
-		usePublicLiveUpdates({ enabled: () => state.enabled, busy: () => state.busy, url: () => state.url, photoId: () => state.photoId, apply })
+		live = usePublicLiveUpdates({ snapshot, preserveWindow: () => preserveWindow, enabled: () => state.enabled, busy: () => state.busy, url: () => state.url, photoId: () => state.photoId, apply })
 		return () => null
 	} }))
-	return { state, apply, wrapper }
+	return { state, apply, wrapper, snapshot, live }
 }
 describe('visible public kiosk updates', () => {
 	beforeEach(() => {
@@ -47,6 +49,24 @@ describe('visible public kiosk updates', () => {
 			finish({ ok: true, json: async () => page })
 			await vi.advanceTimersByTimeAsync(0)
 			expect(apply).not.toHaveBeenCalled()
+		} finally { wrapper.unmount() }
+	})
+	it('offers a refresh without discarding batches already read', async () => {
+		const next = { ...page, total: 2 }
+		const fetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => page })
+			.mockResolvedValueOnce({ ok: true, json: async () => next })
+		vi.stubGlobal('fetch', fetch)
+		const { apply, wrapper, snapshot, live } = harness(true)
+		try {
+			await vi.advanceTimersByTimeAsync(5000)
+			expect(new URL(String(fetch.mock.calls[0][0])).searchParams.has('focusId')).toBe(false)
+			expect(live.updateAvailable.value).toBe(false)
+			await vi.advanceTimersByTimeAsync(5000)
+			expect(apply).not.toHaveBeenCalled()
+			expect(live.updateAvailable.value).toBe(true)
+			snapshot.value = next
+			await nextTick()
+			expect(live.updateAvailable.value).toBe(false)
 		} finally { wrapper.unmount() }
 	})
 	it('aborts requests and removes timers on unmount', async () => {

@@ -191,6 +191,12 @@ den Abschnitt **Systemstatus** der App. Er zeigt begrenzte Betriebskennzahlen zu
 Bereinigung, Uploads, Video, Suche, Benachrichtigungen und Vorschauen, aber keine
 Zugangsdaten oder Benutzerpfade.
 
+Beim fortlaufenden Scrollen gelten der vorhandene Galerie-Endpunkt und
+die Rechte des öffentlichen Links. Die Gästeansicht lädt bis zu 48 Einträge
+pro Block und stellt höchstens eine Blockanfrage gleichzeitig. Das virtuelle
+Raster lädt Vorschauen in der Nähe des sichtbaren Bereichs. Galerien ohne
+gespeicherte Auswahl verwenden Seiten.
+
 Periodische Jobs sind im App-Manifest deklariert und werden von Nextcloud bei
 Installation oder Upgrade registriert; normale Webaufrufe registrieren sie
 nicht erneut. Projektions-Backfills starten erst nach Datenbankmigrationen,

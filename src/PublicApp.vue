@@ -3,13 +3,12 @@ import { matchesInitialGalleryPage } from './composables/usePublicGallerySort.ts
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CheckIcon from 'vue-material-design-icons/Check.vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
+import { groupLabel } from './domain/publicGalleryMedia.ts'
 import { usePublicGridGeometry } from './composables/usePublicGridGeometry.ts'
 import { publicGalleryThemeStyle } from './domain/publicGalleryThemeStyle.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE } from './domain/publicGalleryNavigation.ts'
-import { continuationStorageKey, loadPublicGalleryContinuation, safelyStore } from './domain/publicGalleryPreferences.ts'
 import { galleryHasLogo, galleryTitleMode } from './domain/galleryTitlePresentation.ts'
 import { downloadQuery } from './domain/publicDownloadOptions.ts'
 import type { PublicDownloadPreset } from './domain/publicDownloadOptions.ts'
@@ -19,6 +18,7 @@ import { usePublicPageSwipe } from './composables/usePublicPageSwipe.ts'
 import { usePublicSelection } from './composables/usePublicSelection.ts'
 import { usePublicGalleryNavigation } from './composables/usePublicGalleryNavigation.ts'
 import { usePublicGalleryPage } from './composables/usePublicGalleryPage.ts'
+import { usePublicGalleryScroll } from './composables/usePublicGalleryScroll.ts'
 import { usePublicCollaboration } from './composables/usePublicCollaboration.ts'
 import { usePublicLiveUpdates } from './composables/usePublicLiveUpdates.ts'
 import PublicKioskPhotoNotice from './components/PublicKioskPhotoNotice.vue'
@@ -32,10 +32,9 @@ const PublicStoryGallery = defineAsyncComponent(() => import('./components/Publi
 const PublicGuestDialog = defineAsyncComponent(() => import('./components/PublicGuestDialog.vue'))
 const PublicCollaborationSheet = defineAsyncComponent(() => import('./components/PublicCollaborationSheet.vue'))
 const PublicSelectionBar = defineAsyncComponent(() => import('./components/PublicSelectionBar.vue'))
-const ProgressiveImage = defineAsyncComponent(() => import('./components/ProgressiveImage.vue'))
-const PublicMediaListDetails = defineAsyncComponent(() => import('./components/PublicMediaListDetails.vue'))
+const PublicGalleryLoadMore = defineAsyncComponent(() => import('./components/PublicGalleryLoadMore.vue'))
 const PublicEventAlbumGrid = defineAsyncComponent(() => import('./components/PublicEventAlbumGrid.vue')), virtualGridResolved = ref(false)
-const VirtualMediaGrid = defineAsyncComponent(() => import('./components/VirtualMediaGrid.vue').then(module => {
+const PublicPhotoGrid = defineAsyncComponent(() => import('./components/PublicPhotoGrid.vue').then(module => {
 	virtualGridResolved.value = true
 	return module
 }))
@@ -56,7 +55,10 @@ const pageState = usePublicGalleryPage({
 	apply: async (payload, focusId, current) => { applyGalleryPage(payload); await nextTick(); if (current() && focusId) openPhotoFromLocation(focusId) },
 })
 const { load: loadPage, loading, error } = pageState
-const items = computed(() => pageState.snapshot.value?.items ?? [])
+const items = computed(() => {
+	const base = pageState.snapshot.value?.items ?? []
+	return continuousScroll.value ? pageState.prependedItems.value.concat(base, pageState.appendedItems.value) : base
+})
 const story = computed(() => pageState.snapshot.value?.s ?? [])
 const total = computed(() => pageState.snapshot.value?.total ?? 0)
 const groups = computed(() => pageState.snapshot.value?.groups ?? {})
@@ -77,14 +79,32 @@ const navigation = usePublicGalleryNavigation({
 	clearContinuation: () => { continuation.value = null; continueVisible.value = false },
 })
 const { currentPath, currentPage, search, sortBy, sortDirection, sortOverride, groupBy, layout, initialLocation, updateLocation, changeSort, resetSort, queueSearch, navigateToPage, upOneLevel, applyView, locationState } = navigation
+const continuousScroll = computed(() => !isStaticPreview && settings.value.navigation.browsingMode === 'scroll')
+const storyCollection = computed(() => layout.value === 'story' && continuousScroll.value)
+const visiblePageCount = computed(() => continuousScroll.value ? 1 : pageCount.value)
+const gridLayout = computed(() => layout.value === 'story' ? 'grid' : layout.value)
+const storyPhotoIds = computed(() => [...new Set(settings.value.presentation.story.sections.flatMap(section => section.mediaIds))])
+const gridItems = computed(() => {
+	if (!storyCollection.value) return items.value
+	const assigned = new Set(storyPhotoIds.value)
+	return mediaItems.value.filter(item => !assigned.has(item.id))
+})
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
 const eventAlbumRoot = computed(() => deliveryMode.value === 'event' && currentPath.value === '' && scope.value?.viewMode === 'folder'), openerTotalLabel = computed(() => eventAlbumRoot.value ? n('proofing_gallery', '%n album', '%n albums', total.value) : undefined)
 const headerHeroUrl = computed(() => settings.value.presentation.heroFileId ? assetUrl('hero') : null)
 const headerLogoUrl = computed(() => galleryHasLogo(settings.value.presentation) ? assetUrl('logo') : null)
 const activeIndex = ref<number | null>(props.staticPreview?.scene && props.staticPreview.scene !== 'gallery' ? 0 : null)
 const activeOpener = ref<HTMLElement | null>(null)
+const renderedMedia = shallowRef<MediaItem[]>([])
+const reviewMedia = computed(() => {
+	if (!continuousScroll.value) return mediaItems.value
+	const rendered = renderedMedia.value.filter(item => !item.folder)
+	const active = activeIndex.value === null ? null : lightboxMediaItems.value[activeIndex.value]
+	const visible = rendered.length ? rendered : mediaItems.value.slice(0, PUBLIC_GALLERY_PAGE_SIZE)
+	return active ? [active, ...visible.filter(item => item.id !== active.id)] : visible
+})
 const { guest, collaboration, nonce, requestAsGuest, clearIdentity, joining, collaborationError, guestDialogOpen, initializeCollaboration, loadCollaboration, joinCollaboration, mutateCollaboration, cancelPendingMutation } = usePublicCollaboration({
-	token: props.gallery.token, enabled: !isStaticPreview, settings, mediaItems, endpoint: publicEndpoint, reloadPage: () => loadPage(currentPage.value),
+	token: props.gallery.token, enabled: !isStaticPreview, settings, mediaItems: reviewMedia, endpoint: publicEndpoint, reloadPage: () => loadPage(currentPage.value),
 })
 const { selectedIds, selectionMode, compareOpen, compareItems, selectionName, selectionMessage, savingSelection, saveSelection, prepareSave, toggleSelection, startSelectionMode, finishSelectionMode, openSelectionCompare, toggleCompare } = usePublicSelection({
 	token: props.gallery.token, preview: isStaticPreview, settings, mediaItems, mutate: mutateCollaboration, closePanel: () => { activePanel.value = null },
@@ -93,10 +113,20 @@ const galleryDownloadBusy = ref(false)
 const galleryDownloadError = ref('')
 const [downloadPreset, downloadWatermark] = [ref<PublicDownloadPreset>('original'), ref(false)]
 const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, rules: { minimum: 0, maximum: 0 }, progress: null, current: null })
-const lightboxMediaItems = computed(() => layout.value === 'story' ? mediaItems.value.concat(story.value) : mediaItems.value)
-usePublicLiveUpdates({
+const lightboxMediaItems = computed(() => {
+	if (layout.value !== 'story') return mediaItems.value
+	const loadedIds = new Set(mediaItems.value.map(item => item.id))
+	const allMedia = mediaItems.value.concat(story.value.filter(item => !loadedIds.has(item.id)))
+	if (!storyCollection.value) return allMedia
+	const byId = new Map(allMedia.map(item => [item.id, item]))
+	const curated = storyPhotoIds.value.map(id => byId.get(id)).filter(item => item !== undefined)
+	return curated.concat(settings.value.presentation.story.showAllMedia ? gridItems.value : [])
+})
+const { updateAvailable } = usePublicLiveUpdates({
+	snapshot: pageState.snapshot,
+	preserveWindow: () => continuousScroll.value && (pageState.lastPage.value > currentPage.value || pageState.prependedItems.value.length > 0),
 	enabled: () => !isStaticPreview && props.gallery.initialPage?.gallery.liveUpdates === true,
-	busy: () => loading.value || compareOpen.value,
+	busy: () => loading.value || appending.value || compareOpen.value,
 	url: () => publicEndpoint(pageQuery(currentPage.value)),
 	photoId: () => activeIndex.value === null ? null : lightboxMediaItems.value[activeIndex.value]?.id ?? null,
 	apply: (page, photoId) => {
@@ -118,19 +148,34 @@ const mediaDimensions = ref<Record<number, { width: number; height: number }>>({
 const mobileViewportQuery = window.matchMedia('(max-width: 520px)')
 const mobileViewport = ref(mobileViewportQuery.matches)
 const viewportWidth = ref(window.innerWidth)
-let scrollTimer: number | undefined
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
 const scrollElement = ref<HTMLElement | null>(null)
-const pageSwipe = usePublicPageSwipe({ page: currentPage, pageCount, blocked: () => loading.value || activeIndex.value !== null || compareOpen.value || activePanel.value !== null, navigate: page => void navigateToPage(page) })
+const pageSwipe = usePublicPageSwipe({ page: currentPage, pageCount, blocked: () => continuousScroll.value || loading.value || activeIndex.value !== null || compareOpen.value || activePanel.value !== null, navigate: page => void navigateToPage(page) })
 const selectionBar = computed(() => ({ selecting: selectionMode.value, selectedCount: selectedIds.value.length, canSave: settings.value.mode === 'collaboration' && settings.value.review?.selections !== false, canDownload: ['selection', 'all'].includes(downloadScope.value), saving: savingSelection.value, review: review.value }))
-const continuation = ref(isStaticPreview ? null : loadPublicGalleryContinuation(props.gallery.token))
-const continueVisible = ref(!!(continuation.value && continuation.value.scrollY > 240))
+const { append, prepend, hasMore, hasPrevious, appending, appendError, prependError, mediaOffset, mediaTotal } = pageState
+const { continuation, continueVisible, rememberPosition, onContentScroll, restoreBatches, restoring } = usePublicGalleryScroll({
+	token: props.gallery.token, preview: isStaticPreview, enabled: continuousScroll, pageState,
+	location: () => locationState(activeIndex.value === null ? null : lightboxMediaItems.value[activeIndex.value]?.id ?? null),
+})
+const showLoadMore = computed(() => continuousScroll.value && hasMore.value && (layout.value !== 'story' || settings.value.presentation.story.showAllMedia || eventAlbumRoot.value))
+const currentView = computed(() => !restoring.value && search.value.trim() === (pageState.snapshot.value?.view?.search ?? ''))
+const canLoadMore = computed(() => showLoadMore.value && currentView.value && activeIndex.value === null)
+const lightboxPaging = computed(() => {
+	if (!continuousScroll.value || (layout.value === 'story' && !settings.value.presentation.story.showAllMedia)) return undefined
+	return {
+		before: hasPrevious.value, after: hasMore.value, busy: appending.value,
+		failedBefore: prependError.value, failedAfter: appendError.value,
+		offset: storyCollection.value ? 0 : mediaOffset.value,
+		total: storyCollection.value ? null : mediaTotal.value ?? null,
+		load: (direction: -1 | 1) => currentView.value ? (direction === -1 ? prepend() : append()) : Promise.resolve(false),
+	}
+})
 const downloadScope = computed(() => settings.value.delivery.downloadScope)
 function galleryControlProps() {
 	return {
 		total: total.value,
 		page: currentPage.value,
-		pageCount: pageCount.value,
+		pageCount: visiblePageCount.value,
 		mobile: mobileViewport.value,
 		panel: activePanel.value,
 		collection: scope.value?.viewMode === 'collection',
@@ -149,7 +194,8 @@ function galleryControlProps() {
 		albumRoot: eventAlbumRoot.value,
 	}
 }
-const { tileGap, tileMinWidth, targetRowHeight, gridPlaceholderStyle } = usePublicGridGeometry({ settings, mobile: mobileViewport, width: viewportWidth, items, layout, resolved: virtualGridResolved, ratio: itemRatio })
+const { tileGap, tileMinWidth, targetRowHeight, gridPlaceholderStyle } = usePublicGridGeometry({ settings, mobile: mobileViewport, width: viewportWidth, items: gridItems, layout: gridLayout, resolved: virtualGridResolved, ratio: itemRatio })
+const leadPhotoId = computed(() => mediaItems.value[0]?.id)
 
 // The gallery prop is immutable on the public page; the design preview
 // iframe mutates it to stream unsaved settings changes into the app.
@@ -183,7 +229,6 @@ onBeforeUnmount(() => {
 	window.cancelAnimationFrame(collaborationFrame ?? 0)
 	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
 	window.removeEventListener('resize', onViewportResize)
-	window.clearTimeout(scrollTimer)
 	pageSwipe.destroy()
 })
 
@@ -221,17 +266,6 @@ function applyGalleryPage(payload: PublicGalleryPage) {
 	if (collaboration.value !== null && settings.value.mode === 'collaboration') void loadCollaboration()
 }
 
-function onContentScroll(event: CustomEvent<{ scrollTop: number }>) {
-	if (isStaticPreview) return
-	const currentScrollY = event.detail.scrollTop
-	window.clearTimeout(scrollTimer)
-	scrollTimer = window.setTimeout(() => {
-		const value = { scrollY: currentScrollY, fileId: activeIndex.value === null ? continuation.value?.fileId ?? null : lightboxMediaItems.value[activeIndex.value]?.id ?? null, path: currentPath.value, page: currentPage.value }
-		continuation.value = value
-		safelyStore(() => localStorage.setItem(continuationStorageKey(props.gallery.token), JSON.stringify(value)))
-	}, 80)
-}
-
 async function continueViewing() {
 	const saved = continuation.value
 	if (!saved) return
@@ -240,9 +274,10 @@ async function continueViewing() {
 		currentPath.value = saved.path
 		currentPage.value = saved.page
 		updateLocation('replace', saved.fileId)
-		await loadPage(saved.page, saved.fileId)
-		await nextTick()
+		await loadPage(saved.page, continuousScroll.value ? null : saved.fileId)
 	}
+	await restoreBatches(saved.lastPage)
+	await nextTick()
 	requestAnimationFrame(() => scrollElement.value?.scrollTo({ top: saved.scrollY, behavior: 'smooth' }))
 	if (saved.fileId) {
 		const index = mediaItems.value.findIndex(item => item.id === saved.fileId)
@@ -257,12 +292,18 @@ async function shareGallery() {
 	await sharePublicGallery(title.value)
 }
 
-function scrollToGrid() {
-	const grid = document.querySelector<HTMLElement>('.media-grid-shell')
+async function navigateToPageAfterRefresh() {
+	await loadPage(currentPage.value)
+	await nextTick()
+	scrollToGrid()
+}
+
+function scrollToGrid(behavior: ScrollBehavior = 'smooth') {
+	const grid = document.querySelector<HTMLElement>('.media-grid-shell, .event-albums, .story-gallery')
 	const scroller = scrollElement.value
 	if (!grid || !scroller) return
 	const top = grid.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12
-	scroller.scrollTo({ top, behavior: 'smooth' })
+	scroller.scrollTo({ top, behavior })
 }
 
 function previewUrl(item: Pick<MediaItem, 'id'>, width = 900, height = 900, mode: 'cover' | 'fit' = 'cover'): string {
@@ -353,9 +394,8 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 	if (!item.folder) {
 		activeOpener.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
 		activeIndex.value = lightboxMediaItems.value.findIndex(media => media.id === item.id)
-		continuation.value = { scrollY: scrollElement.value?.scrollTop ?? 0, fileId: item.id, path: currentPath.value, page: currentPage.value }
+		rememberPosition(scrollElement.value?.scrollTop ?? 0, item.id)
 		if (!isStaticPreview) {
-			safelyStore(() => localStorage.setItem(continuationStorageKey(props.gallery.token), JSON.stringify(continuation.value)))
 			updateLocation('push', item.id, { proofingGalleryPhoto: true })
 		}
 		return
@@ -363,7 +403,7 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 	currentPath.value = item.relativePath ?? [currentPath.value, item.name].filter(Boolean).join('/')
 	currentPage.value = 1
 	updateLocation('push')
-	loadPage(1)
+	void loadPage(1).then(async () => { await nextTick(); scrollToGrid('instant') })
 }
 
 function openPhotoFromLocation(fileId: number) {
@@ -386,27 +426,6 @@ function closeLightbox() {
 	activeOpener.value = null
 }
 
-function mediaAccessibleName(item: MediaItem): string {
-	const action = item.folder
-		? t('proofing_gallery', 'Open folder {name}', { name: item.name })
-		: t('proofing_gallery', 'Open {name}', { name: item.name })
-	const likeCount = collaboration.value?.likes[item.id]?.count ?? 0
-	return likeCount > 0
-		? `${action}. ${n('proofing_gallery', '%n like', '%n likes', likeCount)}`
-		: action
-}
-
-function startsGroup(item: MediaItem, index: number): boolean {
-	return groupBy.value !== 'none' && (index === 0 || items.value[index - 1]?.group !== item.group)
-}
-
-function groupLabel(group: string | undefined): string {
-	if (group === 'image') return t('proofing_gallery', 'Images')
-	if (group === 'video') return t('proofing_gallery', 'Videos')
-	if (group === 'root') return t('proofing_gallery', 'Main folder')
-	return group || t('proofing_gallery', 'Other')
-}
-
 </script>
 
 <template>
@@ -426,7 +445,7 @@ function groupLabel(group: string | undefined): string {
 				:studio-name="settings.presentation.instanceStudioName"
 				:logo-url="headerLogoUrl"
 				:page="currentPage"
-				:page-count="pageCount"
+				:page-count="visiblePageCount"
 				:searching="searchOpen"
 				:selection-mode="selectionMode"
 				:selected-count="selectedIds.length"
@@ -472,6 +491,12 @@ function groupLabel(group: string | undefined): string {
 						</button>
 						<button type="button" :aria-label="t('proofing_gallery', 'Dismiss')" @click="continueVisible = false">
 							×
+						</button>
+					</div>
+
+					<div v-else-if="updateAvailable" class="continuation-banner" role="status">
+						<button type="button" @click="navigateToPageAfterRefresh">
+							{{ t('proofing_gallery', 'Refresh gallery') }}
 						</button>
 					</div>
 
@@ -547,80 +572,53 @@ function groupLabel(group: string | undefined): string {
 							:preview-url="previewUrl"
 							@open="openItem" />
 
-						<PublicStoryGallery
-							v-else-if="layout === 'story'"
-							:sections="settings.presentation.story.sections"
-							:show-all-media="settings.presentation.story.showAllMedia"
-							:show-filenames="settings.presentation.showFilenames"
-							:items="lightboxMediaItems"
-							:preview-url="previewUrl"
-							:selecting="selectionMode"
-							:selected-ids="selectedIds"
-							@open="openItem" />
+						<template v-else>
+							<PublicStoryGallery
+								v-if="layout === 'story'"
+								:sections="settings.presentation.story.sections"
+								:show-all-media="settings.presentation.story.showAllMedia && !storyCollection"
+								:show-filenames="settings.presentation.showFilenames"
+								:items="lightboxMediaItems"
+								:preview-url="previewUrl"
+								:selecting="selectionMode"
+								:selected-ids="selectedIds"
+								@open="openItem" />
 
-						<div v-else class="media-grid-shell" :style="gridPlaceholderStyle">
-							<VirtualMediaGrid
-								class="media-grid"
-								:class="[
-									`media-grid--${layout}`,
-								]"
-								:items="items"
-								:mode="layout"
-								:min-item-width="tileMinWidth"
-								:target-row-height="targetRowHeight"
-								photographic
-								:gap="tileGap"
-								:item-dimensions="mediaDimensions"
-								:scroll-element="scrollElement"
-								:aria-label="t('proofing_gallery', 'Gallery files')">
-								<template #default="{ item, index }">
-									<article
-										class="media-tile"
-										:class="{ 'media-tile--folder': item.folder, 'media-tile--selected': selectedIds.includes(item.id), 'media-tile--lead': item.id === mediaItems[0]?.id }">
-										<span v-if="startsGroup(item, index)" class="media-tile__group">{{ groupLabel(item.group) }}</span>
-										<button
-											class="media-tile__open"
-											type="button"
-											:aria-label="mediaAccessibleName(item)"
-											@click="openItem(item, $event)">
-											<ProgressiveImage
-												v-if="item.mimeType.startsWith('image/')"
-												:src="tilePreviewUrl(item)"
-												class="media-tile__image"
-												direct
-												:priority="item.id === mediaItems[0]?.id"
-												@load="rememberDimensions(item, $event)" />
-											<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />
-											<span v-else class="media-tile__video" aria-hidden="true">▶</span>
-											<span v-if="layout === 'list'" class="media-tile__details" aria-hidden="true">
-												<strong v-if="item.folder || settings.presentation.showFilenames">{{ item.name }}</strong>
-												<span><PublicMediaListDetails :item="item" :dimensions="mediaDimensions" /></span>
-											</span>
-											<span v-else-if="item.folder || settings.presentation.showFilenames" class="media-tile__name" aria-hidden="true">
-												{{ item.name }}
-											</span>
-											<span
-												v-if="settings.mode === 'collaboration' && !item.folder && collaboration?.likes[item.id]?.count"
-												class="media-tile__likes"
-												aria-hidden="true">
-												♥ {{ collaboration.likes[item.id].count }}
-											</span>
-										</button>
-										<button
-											v-if="selectionMode && !item.folder"
-											class="media-tile__select"
-											:class="{ 'media-tile__select--active': selectedIds.includes(item.id) }"
-											type="button"
-											:aria-checked="selectedIds.includes(item.id)"
-											role="checkbox"
-											:aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })"
-											@click="toggleSelection(item)">
-											<CheckIcon v-if="selectedIds.includes(item.id)" :size="18" aria-hidden="true" />
-										</button>
-									</article>
-								</template>
-							</VirtualMediaGrid>
-						</div>
+							<div v-if="layout !== 'story' || (storyCollection && settings.presentation.story.showAllMedia && gridItems.length)"
+								class="media-grid-shell"
+								:style="gridPlaceholderStyle">
+								<h2 v-if="storyCollection">
+									{{ t('proofing_gallery', 'All photos') }}
+								</h2>
+								<PublicPhotoGrid
+									:items="gridItems"
+									:layout="gridLayout"
+									:min-item-width="tileMinWidth"
+									:target-row-height="targetRowHeight"
+									:gap="tileGap"
+									:dimensions="mediaDimensions"
+									:scroll-element="scrollElement"
+									:track-visible="continuousScroll && settings.mode === 'collaboration'"
+									:lead-photo-id="leadPhotoId"
+									:continuous="continuousScroll"
+									:show-filenames="settings.presentation.showFilenames"
+									:grouped="groupBy !== 'none'"
+									:likes="settings.mode === 'collaboration' ? collaboration?.likes : undefined"
+									:selected-ids="selectedIds"
+									:selecting="selectionMode"
+									:preview-url="tilePreviewUrl"
+									@open="openItem"
+									@select="toggleSelection"
+									@dimensions="rememberDimensions"
+									@visible-items="renderedMedia = $event" />
+							</div>
+						</template>
+						<PublicGalleryLoadMore v-if="showLoadMore && !loading && !error"
+							:scroll-element="scrollElement"
+							:enabled="canLoadMore"
+							:loading="appending"
+							:failed="appendError"
+							@load="append" />
 					</section>
 
 					<PublicCollaborationSheet v-if="settings.mode === 'collaboration' && collaborationSheetLoaded"
@@ -649,6 +647,7 @@ function groupLabel(group: string | undefined): string {
 					<PublicLightbox
 						v-if="activeIndex !== null"
 						:media-items="lightboxMediaItems"
+						:paging="lightboxPaging"
 						:initial-index="activeIndex"
 						:initial-element="activeOpener"
 						:settings="settings"

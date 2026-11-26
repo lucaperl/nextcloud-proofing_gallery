@@ -98,6 +98,8 @@
 	transform: translateX(50%);
 }
 
+.lightbox-load-retry { pointer-events: auto; cursor: pointer; }
+
 .touch-hint-enter-active, .touch-hint-leave-active { transition: opacity 160ms ease, transform 160ms ease; }
 
 .touch-hint-enter-from, .touch-hint-leave-to { opacity: 0; transform: translate(50%, 6px); }

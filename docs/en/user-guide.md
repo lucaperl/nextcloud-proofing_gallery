@@ -159,6 +159,15 @@ the write and are reported for review.
 
 ## Publish and share
 
+Under **Design → Gallery layout → Gallery browsing**, choose **Pages** or
+**Continuous scrolling** for each gallery. In scroll mode the gallery loads
+more files as visitors scroll. If a batch fails to load, use **Try again**
+below the loaded files. The setting also applies to existing public links.
+
+In scroll mode the photo viewer counts the media matching the current folder
+and filters and loads more when guests browse past a batch. **Pages** remains
+the default for galleries without a saved browsing preference.
+
 Open **Share**, create a public link, and configure its audience. Each link
 can have its own start folder, folder depth, language, presentation, password,
 expiry, download scope, metadata fields, feedback, upload permission, and

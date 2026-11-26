@@ -10,5 +10,5 @@ final class PublicGalleryPage {
 	 * @param array<string, int> $groups
 	 * @param array<string, mixed> $indexState
 	 * @param array<string, mixed> $scope */
-	public function __construct(public readonly array $items, public readonly int $total, public readonly PublicGalleryQuery $query, public readonly int $offset, public readonly ?string $nextCursor = null, public readonly ?string $previousCursor = null, public readonly array $groups = [], public readonly array $indexState = [], public readonly array $scope = [], public readonly ?int $focusIndex = null) {}
+	public function __construct(public readonly array $items, public readonly int $total, public readonly PublicGalleryQuery $query, public readonly int $offset, public readonly ?string $nextCursor = null, public readonly ?string $previousCursor = null, public readonly array $groups = [], public readonly array $indexState = [], public readonly array $scope = [], public readonly ?int $focusIndex = null, public readonly ?int $mediaTotal = null, public readonly ?int $mediaOffset = null) {}
 }

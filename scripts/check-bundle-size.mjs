@@ -54,7 +54,7 @@ if (publicGzipSize > publicGzipBudget) {
 console.log(`Bundle budgets passed: owner entry ${rawSize} bytes raw; owner eager JS ${initialGzipSize} bytes gzip; public eager JS ${publicGzipSize} bytes gzip.`)
 
 // These modules load before the default gallery can be used, despite dynamic imports.
-const publicRoots = [publicEntry[0], 'node_modules/@ionic/core/dist/index.js', ...['PublicApp', 'PublicGalleryHeader', 'PublicGalleryOpener', 'PublicGalleryControls', 'VirtualMediaGrid', 'ProgressiveImage'].map(named)]
+const publicRoots = [publicEntry[0], 'node_modules/@ionic/core/dist/index.js', ...['PublicApp', 'PublicGalleryHeader', 'PublicGalleryOpener', 'PublicGalleryControls', 'PublicPhotoGrid'].map(named)]
 // The server uses the same startup graph to eliminate late module waterfalls.
 const publicPreloads = collectBundleAssets(manifest, publicRoots).filter(file => file.endsWith('.mjs'))
 await writeFile(path.join(root, 'js/public-startup.json'), `${JSON.stringify(publicPreloads)}\n`)

@@ -16,12 +16,13 @@ final class NavigationSettings implements JsonSerializable {
 		public readonly string $sortBy,
 		public readonly string $sortDirection,
 		public readonly string $groupBy,
+		public readonly string $browsingMode,
 	) {
 	}
 
 	/** @return array<string, mixed> */
 	public static function defaults(): array {
-		return ['folders' => true, 'recursive' => false, 'groupDepth' => 1, 'sortBy' => 'name', 'sortDirection' => 'asc', 'groupBy' => 'none'];
+		return ['folders' => true, 'recursive' => false, 'groupDepth' => 1, 'sortBy' => 'name', 'sortDirection' => 'asc', 'groupBy' => 'none', 'browsingMode' => 'pages'];
 	}
 
 	/** @param array<string, mixed> $input */
@@ -34,6 +35,7 @@ final class NavigationSettings implements JsonSerializable {
 			SettingsInput::choice($value['sortBy'], 'navigation sort', MediaSort::ALL),
 			SettingsInput::choice($value['sortDirection'], 'navigation direction', MediaSort::DIRECTIONS),
 			SettingsInput::choice($value['groupBy'], 'navigation grouping', ['none', 'type', 'folder']),
+			SettingsInput::choice($value['browsingMode'], 'navigation.browsingMode', ['pages', 'scroll']),
 		);
 	}
 

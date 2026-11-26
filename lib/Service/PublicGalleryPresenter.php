@@ -52,6 +52,8 @@ final class PublicGalleryPresenter {
 			'items' => $items,
 			's' => $storyItems,
 			'total' => $total,
+			'mediaTotal' => $page->mediaTotal ?? $total,
+			'mediaOffset' => $page->mediaOffset ?? $offset,
 			'limit' => $limit,
 			'offset' => $offset,
 			'page' => intdiv($offset, $limit) + 1,

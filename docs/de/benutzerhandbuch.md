@@ -174,6 +174,16 @@ Sidecar stoppen den Schreibvorgang und werden als Konflikt gemeldet.
 
 ## Veröffentlichen und teilen
 
+Unter **Design → Galerielayout → Galerienavigation** wählst du für jede
+Galerie zwischen **Seiten** und **Fortlaufend scrollen**. Im Scrollmodus lädt
+die Galerie beim Scrollen weitere Dateien. Schlägt das Nachladen fehl, wähle
+**Erneut versuchen** unter den bereits geladenen Dateien. Die Einstellung gilt
+auch für bestehende öffentliche Links der Galerie.
+
+Im Scrollmodus zeigt die Fotoansicht die Gesamtzahl für den aktuellen Ordner
+und die aktiven Filter an. Beim Weiterblättern lädt sie zusätzliche Fotos.
+**Seiten** bleibt die Voreinstellung für Galerien ohne gespeicherte Auswahl.
+
 Der Standard-Hauptlink übernimmt zunächst die Feedbackrechte der Galerie.
 Wähle im Linkeditor **Diesen Link separat konfigurieren**, um eigene Rechte
 dauerhaft zu speichern. **Rechte für Rückmeldungen von der Galerie übernehmen**

@@ -51,6 +51,21 @@ final class GallerySettingsTest extends TestCase {
 		GallerySettings::fromArray(['appearance' => ['trackingPixel' => 'https://example.test']]);
 	}
 
+	public function testBrowsingModeDefaultsToPagesAndRoundTrips(): void {
+		$default = GallerySettings::fromArray(['navigation' => ['sortBy' => 'modified']]);
+		self::assertSame('pages', $default->navigation->browsingMode);
+
+		$scroll = GallerySettings::merge($default, ['navigation' => ['browsingMode' => 'scroll']]);
+		$saved = GallerySettings::fromArray($scroll->jsonSerialize());
+		self::assertSame('scroll', $saved->navigation->browsingMode);
+		self::assertSame('modified', $saved->navigation->sortBy);
+	}
+
+	public function testRejectsInvalidBrowsingMode(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['navigation' => ['browsingMode' => 'all-at-once']]);
+	}
+
 	public function testAcceptsLegacyAliasesButEmitsCanonicalSections(): void {
 		$settings = GallerySettings::fromArray([
 			'mode' => 'collaboration',

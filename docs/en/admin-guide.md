@@ -188,6 +188,11 @@ and the app's **System status** section. It reports bounded operational counts,
 cleanup health, upload state, video jobs, semantic indices, notifications, and
 preview storage without revealing credentials or user paths.
 
+Continuous scrolling uses the existing public gallery endpoint and its
+link permissions. The viewer loads up to 48 entries at a time, with one
+batch request in flight. The virtual grid requests previews near the visible
+area. Galleries without a saved browsing preference use pages.
+
 Periodic jobs are declared in the app manifest and registered by Nextcloud on
 install or update; normal web requests must not re-register them. Projection
 backfills start only after schema migrations, persist their cursor and retry
